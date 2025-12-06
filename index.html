@@ -3,11 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OBY Energy - Sistema de Contratos</title>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script> 
+    <title>OBY Energy - Gestor de Templates</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/docx@7.8.2/build/index.js"></script>
+    <script src="https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js"></script>
 </head>
 <body>
     <div id="root"></div>
@@ -15,643 +17,319 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // Configurações do Supabase
         const SUPABASE_URL = 'https://uuaqmwnfjopgjmjjchmw.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1YXFtd25mam9wZ2ptampjaG13Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1OTEyNzUsImV4cCI6MjA3NjE2NzI3NX0.9ITSBR9SNoZKgvF1AuW4OsL4b8Du5NAXttQpi7B3MO8';
 
-        // Credenciais de Admin
-        const ADMIN_USER = 'admin';
-        const ADMIN_PASS = 'oby2025';
+        // Template base do Termo de Adesão
+        const TEMPLATE_BASE = `PROPOSTA DE ADESÃO AO CONTRATO DE CONSÓRCIO
 
-        // --- COMPONENTE: MODAL DE VISUALIZAÇÃO DE CONTRATO (CORRIGIDO) ---
-        function ContratoModal({ proposta, onClose }) {
-            const [contratoTexto, setContratoTexto] = useState('');
-            const [loading, setLoading] = useState(true);
-            const [copiado, setCopiado] = useState(false);
+O(A) PROPONENTE CONSORCIADO(A) encaminha sua Proposta de Adesão ao CONSÓRCIO, conforme condições abaixo:
 
-            useEffect(() => {
-                carregarEMontarContrato();
-            }, []);
+DADOS DO CONSÓRCIO
+Razão Social: [Razao_Social_Consorcio]
+CNPJ: [CNPJ_Consorcio]
+Endereço: [Endereco_Consorcio]
+Consorciada Líder: [Consorciada_Lider]
 
-            const carregarEMontarContrato = async () => {
-                setLoading(true);
-                try {
-                    // Verificar se proposta existe
-                    if (!proposta) {
-                        console.error('❌ Proposta não fornecida');
-                        setContratoTexto('Erro: Nenhuma proposta foi selecionada.');
-                        setLoading(false);
-                        return;
-                    }
-                    
-                    const response = await fetch(`${SUPABASE_URL}/rest/v1/contrato_templates?select=*&order=ordem.asc`, {
-                        headers: {
-                            'Authorization': `Bearer ${SUPABASE_KEY}`,
-                            'apikey': SUPABASE_KEY
-                        }
-                    });
-                    const templates = await response.json();
-                    let contratoCompleto = templates.map(t => t.texto).join('\n\n');
-                    
-                    // ===== PREPARAR TODOS OS DADOS =====
-                    const nomeCliente = proposta.nome && proposta.sobrenome 
-                        ? `${proposta.nome} ${proposta.sobrenome}`
-                        : proposta.nome_fantasia || 'Sem nome';
-                    
-                    const cpfCnpj = proposta.tipo_pessoa === 'fisica' ? proposta.cpf : proposta.cnpj;
-                    
-                    const enderecoCompleto = `${proposta.logradouro || ''}, ${proposta.numero_endereco || ''} ${proposta.complemento ? '- ' + proposta.complemento : ''}, ${proposta.bairro || ''}, ${proposta.cidade || ''} - ${proposta.estado || ''}`.trim();
-                    
-                    const dataAtual = new Date().toLocaleDateString('pt-BR', {
-                        day: '2-digit',
-                        month: '2-digit', 
-                        year: 'numeric'
-                    });
-                    
-                    // ===== SUBSTITUIR TODOS OS PLACEHOLDERS =====
-                    contratoCompleto = contratoCompleto
-                        // Dados do Cliente
-                        .replace(/\[Nome do Cliente\]/g, nomeCliente)
-                        .replace(/\[CPF\/CNPJ\]/g, cpfCnpj || 'N/A')
-                        .replace(/\[Email\]/g, proposta.email || 'N/A')
-                        .replace(/\[Telefone\]/g, proposta.telefone || 'N/A')
-                        
-                        // Endereço Completo
-                        .replace(/\[Endereço Completo\]/g, enderecoCompleto)
-                        .replace(/\[Logradouro\]/g, proposta.logradouro || 'N/A')
-                        .replace(/\[Número\]/g, proposta.numero_endereco || 'N/A')
-                        .replace(/\[Complemento\]/g, proposta.complemento || '')
-                        .replace(/\[Bairro\]/g, proposta.bairro || 'N/A')
-                        .replace(/\[Cidade\]/g, proposta.cidade || 'N/A')
-                        .replace(/\[Estado\]/g, proposta.estado || 'N/A')
-                        .replace(/\[CEP\]/g, proposta.cep || 'N/A')
-                        
-                        // Dados da Instalação
-                        .replace(/\[Número da Instalação\]/g, proposta.numero_instalacao || 'N/A')
-                        .replace(/\[Distribuidora\]/g, proposta.distribuidora_energia || 'N/A')
-                        .replace(/\[Consumo\]/g, proposta.consumo_kwh || '0')
-                        .replace(/\[Tipo de Conexão\]/g, proposta.tipo_conexao || 'N/A')
-                        
-                        // Dados do Contrato
-                        .replace(/\[Número do Contrato\]/g, proposta.numero_contrato || 'N/A')
-                        .replace(/\[Data\]/g, dataAtual)
-                        .replace(/\[X\]/g, proposta.desconto_aplicado || '15')
-                        
-                        // Dados Financeiros
-                        .replace(/\[Custo Atual\]/g, proposta.simulacao_conta_atual ? `R$ ${parseFloat(proposta.simulacao_conta_atual).toFixed(2)}` : 'N/A')
-                        .replace(/\[Custo OBY\]/g, proposta.simulacao_conta_nova ? `R$ ${parseFloat(proposta.simulacao_conta_nova).toFixed(2)}` : 'N/A')
-                        .replace(/\[Economia Mensal\]/g, proposta.simulacao_economia_mensal ? `R$ ${parseFloat(proposta.simulacao_economia_mensal).toFixed(2)}` : 'N/A');
+DADOS DO(A) PROPONENTE CONSORCIADO(A):
+Razão Social: [Nome_do_Cliente]
+CNPJ: [CPF_CNPJ]
+Endereço: [Endereco_Completo]
+Representante Legal: [Representante_Legal]
+E-mail de contato: [Email]
+Nº Unidade Consumidora: [Numero_da_Instalacao]
+Nº Cliente Concessionária: [Numero_Cliente_Concessionaria]
+Tipo de Conexão: [Tipo_de_Conexao]
+Consumo mínimo (kWh): [Consumo]
+Desconto sobre a Energia Injetada pelo Consórcio (%): [Desconto_Percentual]
 
-                    setContratoTexto(contratoCompleto);
-                } catch (error) {
-                    console.error('Erro ao carregar contrato:', error);
-                    setContratoTexto('Erro ao carregar o contrato. Por favor, tente novamente.');
-                } finally {
-                    setLoading(false);
+ADESÃO AO CONSÓRCIO
+O(A) PROPONENTE CONSORCIADO(A) propõe neste ato ingressar no CONSÓRCIO, e compromete-se a cumprir o Contrato de Consórcio celebrado entre a LÍDER e as demais Partes Consorciadas.
+
+[Cidade], [Data]
+
+_________________________________
+CONTRATANTE
+[Nome_do_Cliente]
+CPF/CNPJ: [CPF_CNPJ]
+
+_________________________________
+OBY ENERGY - CONTRATADA`;
+
+        // Campos variáveis disponíveis
+        const CAMPOS_PADRAO = [
+            { id: 1, nome: '[Nome_do_Cliente]', descricao: 'Nome completo do cliente', categoria: 'Cliente' },
+            { id: 2, nome: '[CPF_CNPJ]', descricao: 'CPF ou CNPJ do cliente', categoria: 'Cliente' },
+            { id: 3, nome: '[Email]', descricao: 'E-mail do cliente', categoria: 'Cliente' },
+            { id: 4, nome: '[Telefone]', descricao: 'Telefone do cliente', categoria: 'Cliente' },
+            { id: 5, nome: '[Endereco_Completo]', descricao: 'Endereço completo', categoria: 'Endereço' },
+            { id: 6, nome: '[Cidade]', descricao: 'Cidade', categoria: 'Endereço' },
+            { id: 7, nome: '[Estado]', descricao: 'Estado (UF)', categoria: 'Endereço' },
+            { id: 8, nome: '[CEP]', descricao: 'CEP', categoria: 'Endereço' },
+            { id: 9, nome: '[Numero_da_Instalacao]', descricao: 'Número da instalação', categoria: 'Instalação' },
+            { id: 10, nome: '[Distribuidora]', descricao: 'Distribuidora de energia', categoria: 'Instalação' },
+            { id: 11, nome: '[Consumo]', descricao: 'Consumo em kWh', categoria: 'Instalação' },
+            { id: 12, nome: '[Tipo_de_Conexao]', descricao: 'Tipo de conexão (Mono/Bi/Tri)', categoria: 'Instalação' },
+            { id: 13, nome: '[Numero_do_Contrato]', descricao: 'Número do contrato OBY', categoria: 'Contrato' },
+            { id: 14, nome: '[Data]', descricao: 'Data atual formatada', categoria: 'Contrato' },
+            { id: 15, nome: '[Desconto_Percentual]', descricao: 'Percentual de desconto (%)', categoria: 'Financeiro' },
+            { id: 16, nome: '[Custo_Atual]', descricao: 'Custo atual (R$)', categoria: 'Financeiro' },
+            { id: 17, nome: '[Custo_OBY]', descricao: 'Custo OBY (R$)', categoria: 'Financeiro' },
+            { id: 18, nome: '[Economia_Mensal]', descricao: 'Economia mensal (R$)', categoria: 'Financeiro' },
+            { id: 19, nome: '[Razao_Social_Consorcio]', descricao: 'Razão social do consórcio', categoria: 'Consórcio' },
+            { id: 20, nome: '[CNPJ_Consorcio]', descricao: 'CNPJ do consórcio', categoria: 'Consórcio' },
+        ];
+
+        function GestorTemplates() {
+            const [template, setTemplate] = useState(TEMPLATE_BASE);
+            const [campos, setCampos] = useState(CAMPOS_PADRAO);
+            const [novoCampo, setNovoCampo] = useState({ nome: '', descricao: '', categoria: 'Personalizado' });
+            const [salvando, setSalvando] = useState(false);
+            const [proposta, setProposta] = useState(null);
+
+            const adicionarCampo = () => {
+                if (!novoCampo.nome || !novoCampo.descricao) {
+                    alert('Preencha nome e descrição do campo!');
+                    return;
                 }
-            };
-
-            const handleCopiar = async () => {
-                try {
-                    const nomeCliente = proposta.nome && proposta.sobrenome 
-                        ? `${proposta.nome} ${proposta.sobrenome}`
-                        : proposta.nome_fantasia || 'Sem nome';
-                    
-                    const textoCompleto = `═══════════════════════════════════════════════════════
-CONTRATO Nº: ${proposta.numero_contrato || 'N/A'}
-Cliente: ${nomeCliente}
-Data: ${new Date().toLocaleDateString('pt-BR')}
-═══════════════════════════════════════════════════════
-
-${contratoTexto}`;
-                    
-                    await navigator.clipboard.writeText(textoCompleto);
-                    setCopiado(true);
-                    
-                    setTimeout(() => {
-                        setCopiado(false);
-                    }, 2000);
-                } catch (error) {
-                    alert('❌ Erro ao copiar o contrato. Tente novamente.');
-                    console.error('Erro ao copiar:', error);
-                }
-            };
-
-            return (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[95vh] flex flex-col">
-                        <div className="p-6 border-b border-gray-200 flex justify-between items-center print:hidden">
-                            <div>
-                                <h2 className="text-2xl font-bold text-gray-800">📄 Visualização do Contrato</h2>
-                                <p className="text-sm text-gray-500">Cliente: {proposta.nome && proposta.sobrenome 
-                                    ? `${proposta.nome} ${proposta.sobrenome}`
-                                    : proposta.nome_fantasia || 'Sem nome'}</p>
-                                <p className="text-sm text-blue-600">Nº Contrato: {proposta.numero_contrato || 'N/A'}</p>
-                            </div>
-                            <button 
-                                onClick={onClose}
-                                className="text-gray-500 hover:text-gray-700 text-3xl font-bold"
-                            >
-                                ×
-                            </button>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto p-8 bg-white">
-                            {loading ? (
-                                <div className="text-center py-12">
-                                    <p className="text-gray-600 text-lg">⏳ Carregando contrato...</p>
-                                </div>
-                            ) : (
-                                <div className="max-w-4xl mx-auto bg-white shadow-lg p-12 rounded-lg print:shadow-none print:p-0">
-                                    <div className="prose prose-sm max-w-none">
-                                        <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-gray-800">
-                                            {contratoTexto}
-                                        </pre>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="p-6 border-t border-gray-200 flex justify-end gap-3 print:hidden">
-                            <button 
-                                onClick={handleCopiar}
-                                disabled={loading}
-                                className={`px-6 py-3 rounded-lg font-semibold transition ${
-                                    copiado 
-                                        ? 'bg-green-600 text-white' 
-                                        : 'bg-blue-600 text-white hover:bg-blue-700'
-                                } disabled:opacity-50`}
-                            >
-                                {copiado ? '✅ Copiado!' : '📋 Copiar Contrato'}
-                            </button>
-                            <button 
-                                onClick={onClose}
-                                className="px-6 py-3 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700"
-                            >
-                                Fechar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-
-        // --- COMPONENTE: EDITOR DE TEMPLATES ---
-        function EditorTemplates() {
-            const [templates, setTemplates] = useState([]);
-            const [loadingTemplates, setLoadingTemplates] = useState(false);
-            const [savingTemplates, setSavingTemplates] = useState(false);
-
-            useEffect(() => {
-                carregarTemplates();
-            }, []);
-
-            const carregarTemplates = async () => {
-                setLoadingTemplates(true);
-                try {
-                    const response = await fetch(`${SUPABASE_URL}/rest/v1/contrato_templates?select=*&order=ordem.asc`, {
-                        headers: {
-                            'Authorization': `Bearer ${SUPABASE_KEY}`,
-                            'apikey': SUPABASE_KEY
-                        }
-                    });
-                    const data = await response.json();
-                    setTemplates(data);
-                } catch (error) {
-                    console.error('❌ Erro ao carregar templates:', error);
-                } finally {
-                    setLoadingTemplates(false);
-                }
-            };
-
-            const salvarTemplates = async () => {
-                setSavingTemplates(true);
-                try {
-                    for (const template of templates) {
-                        await fetch(`${SUPABASE_URL}/rest/v1/contrato_templates?id=eq.${template.id}`, {
-                            method: 'PATCH',
-                            headers: {
-                                'Authorization': `Bearer ${SUPABASE_KEY}`,
-                                'apikey': SUPABASE_KEY,
-                                'Content-Type': 'application/json',
-                                'Prefer': 'return=representation'
-                            },
-                            body: JSON.stringify({
-                                texto: template.texto
-                            })
-                        });
-                    }
-                    alert('✅ Templates salvos com sucesso!');
-                } catch (error) {
-                    alert('Erro ao salvar templates.');
-                } finally {
-                    setSavingTemplates(false);
-                }
-            };
-
-            const atualizarTemplate = (id, novoTexto) => {
-                setTemplates(templates.map(t => 
-                    t.id === id ? {...t, texto: novoTexto} : t
-                ));
-            };
-
-            return (
-                <div className="bg-white rounded-xl shadow-lg p-6">
-                    <div className="mb-6">
-                        <h2 className="text-2xl font-bold text-gray-800">📄 Editor de Templates de Contrato</h2>
-                        <p className="text-sm text-gray-500 mt-2">
-                            Edite os templates do contrato abaixo. Use os placeholders disponíveis para inserir dados dinâmicos.
-                        </p>
-                    </div>
-
-                    {/* Lista de Placeholders */}
-                    <div className="mb-6 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
-                        <h3 className="font-bold text-blue-800 mb-3">📋 Placeholders Disponíveis:</h3>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
-                            <div className="bg-white p-2 rounded shadow-sm">
-                                <strong>Cliente:</strong> [Nome do Cliente], [CPF/CNPJ], [Email], [Telefone]
-                            </div>
-                            <div className="bg-white p-2 rounded shadow-sm">
-                                <strong>Endereço:</strong> [Endereço Completo], [Logradouro], [Número], [Complemento], [Bairro], [Cidade], [Estado], [CEP]
-                            </div>
-                            <div className="bg-white p-2 rounded shadow-sm">
-                                <strong>Instalação:</strong> [Número da Instalação], [Distribuidora], [Consumo], [Tipo de Conexão]
-                            </div>
-                            <div className="bg-white p-2 rounded shadow-sm">
-                                <strong>Contrato:</strong> [Número do Contrato], [Data], [X] (desconto %)
-                            </div>
-                            <div className="bg-white p-2 rounded shadow-sm">
-                                <strong>Financeiro:</strong> [Custo Atual], [Custo OBY], [Economia Mensal]
-                            </div>
-                        </div>
-                    </div>
-
-                    {loadingTemplates ? (
-                        <p className="text-center text-gray-500 py-8">⏳ Carregando templates...</p>
-                    ) : (
-                        <div className="space-y-6">
-                            {templates.map((template) => (
-                                <div key={template.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <label className="block font-semibold text-gray-700">
-                                            {template.secao}
-                                        </label>
-                                        <span className="text-xs text-gray-500">Ordem: {template.ordem}</span>
-                                    </div>
-                                    <textarea
-                                        value={template.texto}
-                                        onChange={(e) => atualizarTemplate(template.id, e.target.value)}
-                                        rows="6"
-                                        className="w-full p-3 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500"
-                                    />
-                                </div>
-                            ))}
-
-                            <div className="flex gap-4 pt-4 border-t">
-                                <button 
-                                    onClick={salvarTemplates} 
-                                    disabled={savingTemplates} 
-                                    className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50"
-                                >
-                                    {savingTemplates ? '💾 Salvando...' : '💾 Salvar Alterações'}
-                                </button>
-                                <button 
-                                    onClick={carregarTemplates} 
-                                    disabled={loadingTemplates} 
-                                    className="flex-1 px-6 py-3 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 disabled:opacity-50"
-                                >
-                                    🔄 Recarregar Templates
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        }
-
-        // --- COMPONENTE: LISTA DE PROPOSTAS PARA CONTRATOS ---
-        function ListaPropostasContratos({ onVisualizarContrato }) {
-            const [propostas, setPropostas] = useState([]);
-            const [loading, setLoading] = useState(false);
-            const [busca, setBusca] = useState('');
-            const [filtroStatus, setFiltroStatus] = useState('aprovado');
-
-            useEffect(() => {
-                carregarPropostas();
-            }, []);
-
-            const carregarPropostas = async () => {
-                setLoading(true);
-                try {
-                    console.log('🔍 Carregando propostas...');
-                    const response = await fetch(`${SUPABASE_URL}/rest/v1/propostas?select=*&order=data_criacao.desc`, {
-                        headers: {
-                            'Authorization': `Bearer ${SUPABASE_KEY}`,
-                            'apikey': SUPABASE_KEY
-                        }
-                    });
-                    
-                    console.log('📡 Response status:', response.status);
-                    
-                    if (response.ok) {
-                        const data = await response.json();
-                        console.log('✅ Propostas carregadas:', data.length);
-                        setPropostas(data || []);
-                    } else {
-                        console.error('❌ Erro HTTP:', response.status, response.statusText);
-                        const errorText = await response.text();
-                        console.error('Detalhes:', errorText);
-                        alert(`Erro ao carregar propostas: ${response.status}`);
-                        setPropostas([]);
-                    }
-                } catch (error) {
-                    console.error('❌ Erro ao carregar propostas:', error);
-                    alert('Erro de conexão. Verifique sua internet ou as configurações do Supabase.');
-                    setPropostas([]);
-                } finally {
-                    setLoading(false);
-                }
-            };
-
-            const propostasFiltradas = propostas.filter(p => {
-                const matchStatus = filtroStatus === 'todos' || p.status === filtroStatus;
-                const nomeCompleto = p.nome && p.sobrenome 
-                    ? `${p.nome} ${p.sobrenome}` 
-                    : p.nome_fantasia || '';
-                const matchBusca = !busca || 
-                    nomeCompleto.toLowerCase().includes(busca.toLowerCase()) ||
-                    p.email?.toLowerCase().includes(busca.toLowerCase()) ||
-                    p.numero_contrato?.toLowerCase().includes(busca.toLowerCase());
-                return matchStatus && matchBusca;
-            });
-
-            const getStatusBadge = (status) => {
-                const configs = {
-                    'pendente': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: '🟡 Pendente' },
-                    'aprovado': { bg: 'bg-green-100', text: 'text-green-800', label: '🟢 Aprovado' },
-                    'reprovado': { bg: 'bg-red-100', text: 'text-red-800', label: '🔴 Reprovado' },
-                    'lista_espera': { bg: 'bg-orange-100', text: 'text-orange-800', label: '🟠 Lista Espera' }
+                
+                const nomeCampo = novoCampo.nome.startsWith('[') ? novoCampo.nome : `[${novoCampo.nome}]`;
+                const novoCampoObj = {
+                    id: campos.length + 1,
+                    nome: nomeCampo,
+                    descricao: novoCampo.descricao,
+                    categoria: novoCampo.categoria
                 };
-                const config = configs[status] || configs['pendente'];
-                return (
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${config.bg} ${config.text}`}>
-                        {config.label}
-                    </span>
-                );
+                
+                setCampos([...campos, novoCampoObj]);
+                setNovoCampo({ nome: '', descricao: '', categoria: 'Personalizado' });
+                alert('✅ Campo adicionado!');
             };
 
+            const removerCampo = (id) => {
+                if (confirm('Remover este campo?')) {
+                    setCampos(campos.filter(c => c.id !== id));
+                }
+            };
+
+            const inserirCampo = (nomeCampo) => {
+                const textarea = document.getElementById('editor-template');
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                const text = textarea.value;
+                const antes = text.substring(0, start);
+                const depois = text.substring(end);
+                
+                setTemplate(antes + nomeCampo + depois);
+                
+                // Reposicionar cursor
+                setTimeout(() => {
+                    textarea.focus();
+                    textarea.setSelectionRange(start + nomeCampo.length, start + nomeCampo.length);
+                }, 10);
+            };
+
+            const salvarTemplate = async () => {
+                setSalvando(true);
+                try {
+                    // Salvar no Supabase (você pode adaptar para sua estrutura)
+                    alert('✅ Template salvo com sucesso!');
+                    localStorage.setItem('oby_template_contrato', template);
+                    localStorage.setItem('oby_campos_customizados', JSON.stringify(campos));
+                } catch (error) {
+                    alert('❌ Erro ao salvar: ' + error.message);
+                } finally {
+                    setSalvando(false);
+                }
+            };
+
+            const gerarPrevia = () => {
+                const dadosExemplo = {
+                    '[Nome_do_Cliente]': 'ICARAIMA II LTDA',
+                    '[CPF_CNPJ]': '46176395/0001-89',
+                    '[Email]': 'contato@obyenergy.com',
+                    '[Telefone]': '41 3779-3503',
+                    '[Endereco_Completo]': 'Rua Exemplo, 123, Centro, Curitiba - PR',
+                    '[Cidade]': 'Curitiba',
+                    '[Estado]': 'PR',
+                    '[CEP]': '80000-000',
+                    '[Numero_da_Instalacao]': '21859167',
+                    '[Distribuidora]': 'COPEL',
+                    '[Consumo]': '5000',
+                    '[Tipo_de_Conexao]': 'Trifásica',
+                    '[Numero_do_Contrato]': 'OBY-2025-12345',
+                    '[Data]': new Date().toLocaleDateString('pt-BR'),
+                    '[Desconto_Percentual]': '15',
+                    '[Custo_Atual]': 'R$ 3.500,00',
+                    '[Custo_OBY]': 'R$ 2.975,00',
+                    '[Economia_Mensal]': 'R$ 525,00',
+                    '[Razao_Social_Consorcio]': 'CONSÓRCIO SOLAR PARANÁ',
+                    '[CNPJ_Consorcio]': '12.345.678/0001-90',
+                };
+
+                let previa = template;
+                Object.keys(dadosExemplo).forEach(campo => {
+                    previa = previa.replace(new RegExp(campo.replace(/[[\]]/g, '\\$&'), 'g'), dadosExemplo[campo]);
+                });
+
+                // Gerar DOCX
+                const paragrafos = previa.split('\n').map(linha => {
+                    const isTitulo = linha === linha.toUpperCase() && linha.length > 0 && linha.length < 100;
+                    return new docx.Paragraph({
+                        text: linha,
+                        bold: isTitulo,
+                        spacing: { after: isTitulo ? 300 : 200 }
+                    });
+                });
+
+                const doc = new docx.Document({
+                    sections: [{
+                        properties: {
+                            page: {
+                                margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 }
+                            }
+                        },
+                        children: paragrafos
+                    }]
+                });
+
+                docx.Packer.toBlob(doc).then(blob => {
+                    saveAs(blob, 'Previa_Contrato.docx');
+                    alert('✅ Prévia gerada!');
+                });
+            };
+
+            const categorias = [...new Set(campos.map(c => c.categoria))];
+
             return (
-                <div className="bg-white rounded-xl shadow-lg p-6">
-                    <div className="mb-6">
-                        <h2 className="text-2xl font-bold text-gray-800">📋 Propostas para Geração de Contratos</h2>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                        <input
-                            type="text"
-                            placeholder="🔍 Buscar por nome, email ou número do contrato..."
-                            value={busca}
-                            onChange={(e) => setBusca(e.target.value)}
-                            className="w-full p-3 border border-gray-300 rounded-lg"
-                        />
-                        <select
-                            value={filtroStatus}
-                            onChange={(e) => setFiltroStatus(e.target.value)}
-                            className="w-full p-3 border border-gray-300 rounded-lg"
-                        >
-                            <option value="todos">Todos os Status</option>
-                            <option value="aprovado">Aprovados</option>
-                            <option value="pendente">Pendentes</option>
-                            <option value="reprovado">Reprovados</option>
-                            <option value="lista_espera">Lista de Espera</option>
-                        </select>
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                        <div className="bg-blue-50 p-4 rounded-lg">
-                            <p className="text-sm text-gray-600">Total</p>
-                            <p className="text-2xl font-bold text-blue-800">{propostas.length}</p>
-                        </div>
-                        <div className="bg-green-50 p-4 rounded-lg">
-                            <p className="text-sm text-gray-600">Aprovados</p>
-                            <p className="text-2xl font-bold text-green-800">
-                                {propostas.filter(p => p.status === 'aprovado').length}
-                            </p>
-                        </div>
-                        <div className="bg-yellow-50 p-4 rounded-lg">
-                            <p className="text-sm text-gray-600">Com Contrato</p>
-                            <p className="text-2xl font-bold text-yellow-800">
-                                {propostas.filter(p => p.numero_contrato && p.numero_contrato !== '-').length}
-                            </p>
-                        </div>
-                        <div className="bg-purple-50 p-4 rounded-lg">
-                            <p className="text-sm text-gray-600">Pendentes</p>
-                            <p className="text-2xl font-bold text-purple-800">
-                                {propostas.filter(p => p.status === 'pendente').length}
-                            </p>
+                <div className="min-h-screen bg-gray-50">
+                    <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 shadow-lg">
+                        <div className="container mx-auto">
+                            <h1 className="text-3xl font-bold">📄 Gestor de Templates de Contrato</h1>
+                            <p className="text-blue-100 mt-2">Personalize o template e gerencie campos variáveis</p>
                         </div>
                     </div>
 
-                    {loading ? (
-                        <div className="text-center py-8">
-                            <p className="text-gray-600">⏳ Carregando propostas...</p>
+                    <div className="container mx-auto p-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Campos Variáveis */}
+                            <div className="lg:col-span-1">
+                                <div className="bg-white rounded-xl shadow-lg p-6 sticky top-6">
+                                    <h2 className="text-xl font-bold mb-4">🏷️ Campos Variáveis</h2>
+                                    
+                                    {/* Adicionar Novo Campo */}
+                                    <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                                        <h3 className="font-semibold mb-3">➕ Adicionar Campo</h3>
+                                        <input
+                                            type="text"
+                                            placeholder="Nome do campo"
+                                            value={novoCampo.nome}
+                                            onChange={(e) => setNovoCampo({...novoCampo, nome: e.target.value})}
+                                            className="w-full p-2 border rounded mb-2"
+                                        />
+                                        <input
+                                            type="text"
+                                            placeholder="Descrição"
+                                            value={novoCampo.descricao}
+                                            onChange={(e) => setNovoCampo({...novoCampo, descricao: e.target.value})}
+                                            className="w-full p-2 border rounded mb-2"
+                                        />
+                                        <select
+                                            value={novoCampo.categoria}
+                                            onChange={(e) => setNovoCampo({...novoCampo, categoria: e.target.value})}
+                                            className="w-full p-2 border rounded mb-2"
+                                        >
+                                            <option value="Personalizado">Personalizado</option>
+                                            <option value="Cliente">Cliente</option>
+                                            <option value="Endereço">Endereço</option>
+                                            <option value="Instalação">Instalação</option>
+                                            <option value="Contrato">Contrato</option>
+                                            <option value="Financeiro">Financeiro</option>
+                                        </select>
+                                        <button
+                                            onClick={adicionarCampo}
+                                            className="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                                        >
+                                            Adicionar Campo
+                                        </button>
+                                    </div>
+
+                                    {/* Lista de Campos */}
+                                    <div className="max-h-[600px] overflow-y-auto">
+                                        {categorias.map(cat => (
+                                            <div key={cat} className="mb-4">
+                                                <h4 className="font-semibold text-sm text-gray-600 mb-2">{cat}</h4>
+                                                {campos.filter(c => c.categoria === cat).map(campo => (
+                                                    <div key={campo.id} className="bg-gray-50 p-2 rounded mb-2 flex justify-between items-center">
+                                                        <div className="flex-1">
+                                                            <button
+                                                                onClick={() => inserirCampo(campo.nome)}
+                                                                className="text-left w-full hover:text-blue-600"
+                                                            >
+                                                                <span className="font-mono text-sm text-blue-600">{campo.nome}</span>
+                                                                <p className="text-xs text-gray-600">{campo.descricao}</p>
+                                                            </button>
+                                                        </div>
+                                                        {campo.categoria === 'Personalizado' && (
+                                                            <button
+                                                                onClick={() => removerCampo(campo.id)}
+                                                                className="ml-2 text-red-500 hover:text-red-700"
+                                                            >
+                                                                ❌
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Editor de Template */}
+                            <div className="lg:col-span-2">
+                                <div className="bg-white rounded-xl shadow-lg p-6">
+                                    <h2 className="text-xl font-bold mb-4">📝 Editor de Template</h2>
+                                    
+                                    <textarea
+                                        id="editor-template"
+                                        value={template}
+                                        onChange={(e) => setTemplate(e.target.value)}
+                                        className="w-full h-[600px] p-4 border rounded-lg font-mono text-sm"
+                                        placeholder="Digite o template aqui. Clique nos campos ao lado para inserir variáveis."
+                                    />
+
+                                    <div className="flex gap-4 mt-4">
+                                        <button
+                                            onClick={salvarTemplate}
+                                            disabled={salvando}
+                                            className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50"
+                                        >
+                                            {salvando ? '💾 Salvando...' : '💾 Salvar Template'}
+                                        </button>
+                                        <button
+                                            onClick={gerarPrevia}
+                                            className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700"
+                                        >
+                                            👁️ Gerar Prévia DOCX
+                                        </button>
+                                    </div>
+
+                                    <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                                        <p className="text-sm text-gray-700">
+                                            <strong>💡 Dica:</strong> Clique nos campos ao lado para inseri-los no template. 
+                                            Os campos serão substituídos automaticamente pelos dados reais ao gerar o contrato.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    ) : propostasFiltradas.length === 0 ? (
-                        <div className="text-center py-8 bg-gray-50 rounded-lg">
-                            <p className="text-gray-600">📭 Nenhuma proposta encontrada</p>
-                        </div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nº Contrato</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cidade</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {propostasFiltradas.map(proposta => {
-                                        const nomeCliente = proposta.nome && proposta.sobrenome 
-                                            ? `${proposta.nome} ${proposta.sobrenome}`
-                                            : proposta.nome_fantasia || 'Sem nome';
-                                        
-                                        return (
-                                            <tr key={proposta.id} className="hover:bg-gray-50">
-                                                <td className="px-4 py-3 text-sm font-mono font-semibold text-blue-600">
-                                                    {proposta.numero_contrato || '-'}
-                                                </td>
-                                                <td className="px-4 py-3 text-sm text-gray-900 font-medium">
-                                                    {nomeCliente}
-                                                </td>
-                                                <td className="px-4 py-3 text-sm text-gray-600">
-                                                    {proposta.email}
-                                                </td>
-                                                <td className="px-4 py-3 text-sm text-gray-600">
-                                                    {proposta.cidade}
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    {getStatusBadge(proposta.status)}
-                                                </td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <button
-                                                        onClick={() => onVisualizarContrato(proposta)}
-                                                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-semibold"
-                                                    >
-                                                        📄 Gerar Contrato
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
+                    </div>
                 </div>
             );
         }
 
-        // --- COMPONENTE PRINCIPAL: SISTEMA DE CONTRATOS ---
-        function SistemaContratos() {
-            const [isAuthenticated, setIsAuthenticated] = useState(false);
-            const [username, setUsername] = useState('');
-            const [password, setPassword] = useState('');
-            const [activeTab, setActiveTab] = useState('propostas');
-            const [propostaParaContrato, setPropostaParaContrato] = useState(null);
-
-            useEffect(() => {
-                const authStatus = localStorage.getItem('oby_contratos_auth');
-                if (authStatus === 'true') {
-                    setIsAuthenticated(true);
-                }
-            }, []);
-
-            const handleLogin = (e) => {
-                e.preventDefault();
-                if (username === ADMIN_USER && password === ADMIN_PASS) {
-                    setIsAuthenticated(true);
-                    localStorage.setItem('oby_contratos_auth', 'true');
-                } else {
-                    alert('Usuário ou senha incorretos!');
-                }
-            };
-
-            const handleLogout = () => {
-                setIsAuthenticated(false);
-                localStorage.removeItem('oby_contratos_auth');
-                setUsername('');
-                setPassword('');
-            };
-
-            const voltarParaAdmin = () => {
-                window.close();
-            };
-
-            if (!isAuthenticated) {
-                return (
-                    <div className="min-h-screen bg-gradient-to-br from-green-500 to-blue-600 flex items-center justify-center p-4">
-                        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-                            <div className="text-center mb-8">
-                                <h1 className="text-3xl font-bold text-gray-800 mb-2">📄 Sistema de Contratos</h1>
-                                <p className="text-gray-600">OBY Energy</p>
-                            </div>
-                            <form onSubmit={handleLogin} className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Usuário</label>
-                                    <input 
-                                        type="text" 
-                                        value={username} 
-                                        onChange={(e) => setUsername(e.target.value)}
-                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Senha</label>
-                                    <input 
-                                        type="password" 
-                                        value={password} 
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                                        required
-                                    />
-                                </div>
-                                <button 
-                                    type="submit" 
-                                    className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition"
-                                >
-                                    Entrar
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                );
-            }
-
-            return (
-                <div className="min-h-screen bg-gray-100">
-                    <header className="bg-white shadow-md">
-                        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-                            <div className="flex items-center gap-4">
-                                <h1 className="text-2xl font-bold text-green-600">📄 Sistema de Contratos - OBY Energy</h1>
-                            </div>
-                            <div className="flex gap-4">
-                                <button 
-                                    onClick={voltarParaAdmin}
-                                    className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 font-semibold"
-                                >
-                                    ← Voltar ao Admin
-                                </button>
-                                <button 
-                                    onClick={handleLogout} 
-                                    className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600"
-                                >
-                                    Sair
-                                </button>
-                            </div>
-                        </div>
-                    </header>
-
-                    <div className="container mx-auto px-4 py-8">
-                        <div className="mb-6 border-b border-gray-200">
-                            <div className="flex space-x-2">
-                                <button 
-                                    onClick={() => setActiveTab('propostas')} 
-                                    className={`px-6 py-3 font-semibold transition ${activeTab === 'propostas' ? 'border-b-2 border-green-600 text-green-600' : 'text-gray-600 hover:text-green-600'}`}
-                                >
-                                    📋 Propostas
-                                </button>
-                                <button 
-                                    onClick={() => setActiveTab('editor')} 
-                                    className={`px-6 py-3 font-semibold transition ${activeTab === 'editor' ? 'border-b-2 border-green-600 text-green-600' : 'text-gray-600 hover:text-green-600'}`}
-                                >
-                                    ✏️ Editor de Templates
-                                </button>
-                            </div>
-                        </div>
-
-                        {activeTab === 'propostas' ? (
-                            <ListaPropostasContratos onVisualizarContrato={setPropostaParaContrato} />
-                        ) : (
-                            <EditorTemplates />
-                        )}
-                    </div>
-
-                    {propostaParaContrato && (
-                        <ContratoModal 
-                            proposta={propostaParaContrato} 
-                            onClose={() => setPropostaParaContrato(null)} 
-                        />
-                    )}
-                </div>
-            );
-        }
-
-        ReactDOM.render(<SistemaContratos />, document.getElementById('root'));
+        ReactDOM.render(<GestorTemplates />, document.getElementById('root'));
     </script>
 </body>
 </html>
